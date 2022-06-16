@@ -31,6 +31,8 @@ dependencies {
     implementation("org.xerial", "sqlite-jdbc", "3.36.0.3")
 
     implementation("org.jetbrains.kotlin:kotlin-reflect")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-jdk8")
 
     testImplementation(kotlin("test"))
 }
