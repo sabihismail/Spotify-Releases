@@ -34,26 +34,29 @@ object SpotifyImpl {
         val spotifyApiBuilder = SpotifyApi.Builder()
             .setClientId(config.spotifyClientId)
             .setClientSecret(config.spotifyClientSecret)
+            .setRedirectUri(redirectUrl)
 
         if (!DatabaseImpl.accessToken.isNullOrBlank()) {
-            spotifyApiBuilder.setAccessToken(DatabaseImpl.accessToken)
-                .setRefreshToken(DatabaseImpl.refreshToken)
-        }
+            val spotifyApi = spotifyApiBuilder.setRefreshToken(DatabaseImpl.refreshToken)
+                .build()
 
-        val spotifyApi = spotifyApiBuilder.setRedirectUri(redirectUrl)
-            .build()
+            val authorizationCodeRefresh = spotifyApi.authorizationCodeRefresh().build().executeAsync().await()
+            DatabaseImpl.saveSpotifyCredentials(authorizationCodeRefresh)
+        } else {
+            val spotifyApi = spotifyApiBuilder.build()
 
-        val queries = runOAuthRequest {
-            var uri: URI
-            runBlocking {
-                uri = spotifyApi.authorizationCodeUri().build().executeAsync().await()
+            val queries = runOAuthRequest {
+                var uri: URI
+                runBlocking {
+                    uri = spotifyApi.authorizationCodeUri().build().executeAsync().await()
+                }
+                return@runOAuthRequest uri
             }
-            return@runOAuthRequest uri
-        }
-        val code = queries["code"]?.first()
+            val code = queries["code"]?.first()
 
-        val authorizationWithCode = spotifyApi.authorizationCode(code).build().executeAsync().await()
-        DatabaseImpl.saveSpotifyCredentials(authorizationWithCode)
+            val authorizationWithCode = spotifyApi.authorizationCode(code).build().executeAsync().await()
+            DatabaseImpl.saveSpotifyCredentials(authorizationWithCode)
+        }
     }
 
     private suspend fun runOAuthRequest(uriGenerator: () -> URI): Map<String, List<String>> {
