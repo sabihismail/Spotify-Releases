@@ -22,6 +22,11 @@ object SpotifyImpl {
     private val config = Config.get()
     private val redirectUrl = SpotifyHttpManager.makeUri("http://localhost:$redirectUrlPort/$redirectUrlEndpoint")
 
+    private val spotifyApiBuilder = SpotifyApi.Builder()
+        .setClientId(config.spotifyClientId)
+        .setClientSecret(config.spotifyClientSecret)
+        .setRedirectUri(redirectUrl)
+
     suspend fun get() {
         authenticate()
 
@@ -31,14 +36,8 @@ object SpotifyImpl {
     private suspend fun authenticate() {
         if (LocalDateTime.now() < DatabaseImpl.expiresIn) return
 
-        val spotifyApiBuilder = SpotifyApi.Builder()
-            .setClientId(config.spotifyClientId)
-            .setClientSecret(config.spotifyClientSecret)
-            .setRedirectUri(redirectUrl)
-
         if (!DatabaseImpl.accessToken.isNullOrBlank()) {
-            val spotifyApi = spotifyApiBuilder.setRefreshToken(DatabaseImpl.refreshToken)
-                .build()
+            val spotifyApi = spotifyApiBuilder.setRefreshToken(DatabaseImpl.refreshToken).build()
 
             val authorizationCodeRefresh = spotifyApi.authorizationCodeRefresh().build().executeAsync().await()
             DatabaseImpl.saveSpotifyCredentials(authorizationCodeRefresh)
@@ -52,8 +51,8 @@ object SpotifyImpl {
                 }
                 return@runOAuthRequest uri
             }
-            val code = queries["code"]?.first()
 
+            val code = queries["code"]?.first()
             val authorizationWithCode = spotifyApi.authorizationCode(code).build().executeAsync().await()
             DatabaseImpl.saveSpotifyCredentials(authorizationWithCode)
         }
