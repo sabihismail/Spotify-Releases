@@ -29,14 +29,14 @@ object DatabaseImpl {
 
     val accessToken get() = getValue<String>(GenericKeyValueKey.SPOTIFY_ACCESS_TOKEN)
     val refreshToken get() = getValue<String>(GenericKeyValueKey.SPOTIFY_REFRESH_TOKEN)
-    val expiresIn get() = getValue<LocalDateTime>(GenericKeyValueKey.SPOTIFY_EXPIRES_IN)
+    val expiresIn: LocalDateTime get() = getValue<LocalDateTime>(GenericKeyValueKey.SPOTIFY_EXPIRES_IN) ?: LocalDateTime.MIN
     val spotifyStatus get() = getValue<SpotifyStatus>(GenericKeyValueKey.SPOTIFY_STATUS) ?: SpotifyStatus.NOT_STARTED
 
     fun saveSpotifyCredentials(authorizationCodeCredentials: AuthorizationCodeCredentials?) {
         if (authorizationCodeCredentials == null) return
 
         setValue(GenericKeyValueKey.SPOTIFY_ACCESS_TOKEN, authorizationCodeCredentials.accessToken)
-        setValue(GenericKeyValueKey.SPOTIFY_REFRESH_TOKEN, authorizationCodeCredentials.accessToken)
+        setValue(GenericKeyValueKey.SPOTIFY_REFRESH_TOKEN, authorizationCodeCredentials.refreshToken)
         setValue(GenericKeyValueKey.SPOTIFY_EXPIRES_IN, LocalDateTime.now().plusSeconds(authorizationCodeCredentials.expiresIn.toLong()))
     }
 

@@ -6,6 +6,7 @@ import db.models.GenericKeyValueKey
 import db.tables.SpotifyPlaylistTable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.future.await
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import models.SpotifyStatus
@@ -13,6 +14,7 @@ import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.insertIgnore
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.update
 import se.michaelthelin.spotify.SpotifyApi
 import se.michaelthelin.spotify.SpotifyHttpManager
 import se.michaelthelin.spotify.model_objects.specification.PlaylistSimplified
@@ -35,11 +37,16 @@ object SpotifyImpl {
         .setClientSecret(config.spotifyClientSecret)
         .setRedirectUri(redirectUrl)
 
-    suspend fun getPlaylists(): List<ResultRow> {
+    fun getPlaylists(): List<ResultRow> {
         if (DatabaseImpl.spotifyStatus <= SpotifyStatus.PLAYLIST_FETCHING) {
-            authenticate()
-
             DatabaseImpl.setValue(GenericKeyValueKey.SPOTIFY_STATUS, SpotifyStatus.NOT_STARTED)
+            runBlocking {
+                launch(Dispatchers.Default) {
+                    authenticate()
+                }
+            }
+
+            DatabaseImpl.setValue(GenericKeyValueKey.SPOTIFY_STATUS, SpotifyStatus.PLAYLIST_FETCHING)
 
             val api = spotifyApiBuilder.setAccessToken(DatabaseImpl.accessToken)
                 .setRefreshToken(DatabaseImpl.refreshToken)
@@ -53,8 +60,7 @@ object SpotifyImpl {
                 val playlists = api.listOfCurrentUsersPlaylists.limit(50)
                     .offset(offset)
                     .build()
-                    .executeAsync()
-                    .await()
+                    .execute()
 
                 allPlaylists.addAll(playlists.items)
 
@@ -67,15 +73,31 @@ object SpotifyImpl {
                     SpotifyPlaylistTable.insertIgnore {
                         it[playlistId] = playlist.id
                         it[playlistName] = playlist.name
-                        it[isIncludedInResults] = false
+                        it[isIncluded] = false
                     }
                 }
             }
 
-            DatabaseImpl.setValue(GenericKeyValueKey.SPOTIFY_STATUS, SpotifyStatus.PLAYLIST_FETCHING)
+            DatabaseImpl.setValue(GenericKeyValueKey.SPOTIFY_STATUS, SpotifyStatus.PLAYLIST_SELECTION)
         }
 
-        return SpotifyPlaylistTable.selectAll().toList()
+        return transaction {
+            return@transaction SpotifyPlaylistTable.selectAll().toList()
+        }
+    }
+
+    fun setPlaylists(playlistsToCheck: List<Int>) {
+        transaction {
+            SpotifyPlaylistTable.update({ SpotifyPlaylistTable.id inList playlistsToCheck }) {
+                it[isIncluded] = true
+            }
+
+            SpotifyPlaylistTable.update({ SpotifyPlaylistTable.id notInList playlistsToCheck }) {
+                it[isIncluded] = false
+            }
+
+            DatabaseImpl.setValue(GenericKeyValueKey.SPOTIFY_STATUS, SpotifyStatus.ARTIST_FETCHING)
+        }
     }
 
     private suspend fun authenticate() {
