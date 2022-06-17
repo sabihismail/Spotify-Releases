@@ -1,10 +1,10 @@
-package util
+package util.extensions
 
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
 
-object DateTimeExtension {
+object DateTimeExtensions {
     fun LocalDateTime.toEpochSecond(zone: ZoneId = ZoneId.systemDefault()): Long {
         return this.atZone(zone).toEpochSecond()
     }

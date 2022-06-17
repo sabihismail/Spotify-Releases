@@ -1,4 +1,4 @@
-package util
+package util.extensions
 
 import java.net.URI
 import java.net.URLDecoder
@@ -6,11 +6,11 @@ import java.nio.charset.StandardCharsets
 import java.util.AbstractMap.SimpleImmutableEntry
 
 
-object UrlUtils {
-    fun splitQuery(url: URI?): Map<String, List<String>> {
-        if (url == null || url.query.isNullOrEmpty()) return mapOf()
+object UrlExtensions {
+    fun URI?.splitQuery(): Map<String, List<String>> {
+        if (this == null || this.query.isNullOrEmpty()) return mapOf()
 
-        return url.query.split("&")
+        return this.query.split("&")
             .map { splitQueryParameter(it) }
             .groupBy { it.key }
             .map { it.key to it.value.map { inner -> inner.value } }

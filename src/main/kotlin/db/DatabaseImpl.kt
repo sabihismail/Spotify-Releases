@@ -2,12 +2,14 @@ package db
 
 import db.models.GenericKeyValueKey
 import db.tables.GenericKeyValueTable
+import db.tables.SpotifyPlaylistTable
+import models.SpotifyStatus
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.TransactionManager
 import org.jetbrains.exposed.sql.transactions.transaction
 import se.michaelthelin.spotify.model_objects.credentials.AuthorizationCodeCredentials
-import util.DateTimeExtension.toEpochSecond
-import util.DateTimeExtension.toLocalDateTime
+import util.extensions.DateTimeExtensions.toEpochSecond
+import util.extensions.DateTimeExtensions.toLocalDateTime
 import java.sql.Connection
 import java.time.LocalDateTime
 
@@ -20,46 +22,54 @@ object DatabaseImpl {
         transaction {
             SchemaUtils.createMissingTablesAndColumns(
                 GenericKeyValueTable,
+                SpotifyPlaylistTable,
             )
         }
     }
 
-    val accessToken get() = getValue(GenericKeyValueKey.SPOTIFY_ACCESS_TOKEN)
-    val refreshToken get() = getValue(GenericKeyValueKey.SPOTIFY_REFRESH_TOKEN)
-    val expiresIn get() = getValue(GenericKeyValueKey.SPOTIFY_EXPIRES_IN)?.toLongOrNull().toLocalDateTime()
+    val accessToken get() = getValue<String>(GenericKeyValueKey.SPOTIFY_ACCESS_TOKEN)
+    val refreshToken get() = getValue<String>(GenericKeyValueKey.SPOTIFY_REFRESH_TOKEN)
+    val expiresIn get() = getValue<LocalDateTime>(GenericKeyValueKey.SPOTIFY_EXPIRES_IN)
+    val spotifyStatus get() = getValue<SpotifyStatus>(GenericKeyValueKey.SPOTIFY_STATUS) ?: SpotifyStatus.NOT_STARTED
 
     fun saveSpotifyCredentials(authorizationCodeCredentials: AuthorizationCodeCredentials?) {
         if (authorizationCodeCredentials == null) return
 
         setValue(GenericKeyValueKey.SPOTIFY_ACCESS_TOKEN, authorizationCodeCredentials.accessToken)
         setValue(GenericKeyValueKey.SPOTIFY_REFRESH_TOKEN, authorizationCodeCredentials.accessToken)
-        setValue(GenericKeyValueKey.SPOTIFY_EXPIRES_IN, LocalDateTime.now().plusSeconds(authorizationCodeCredentials.expiresIn.toLong()).toEpochSecond())
+        setValue(GenericKeyValueKey.SPOTIFY_EXPIRES_IN, LocalDateTime.now().plusSeconds(authorizationCodeCredentials.expiresIn.toLong()))
     }
 
-    fun getValue(key: GenericKeyValueKey): String? {
-        var str: String? = null
-
+    inline fun <reified T> getValue(key: GenericKeyValueKey): T? {
         val keyId = key.name
-        transaction {
-            val result = GenericKeyValueTable.select { GenericKeyValueTable.key eq keyId }.singleOrNull() ?: return@transaction
-            str = result[GenericKeyValueTable.value]
-        }
 
-        return str
+        return transaction {
+            val result = GenericKeyValueTable.select { GenericKeyValueTable.key eq keyId }.singleOrNull() ?: return@transaction null
+            val returned = result[GenericKeyValueTable.value]
+
+            return@transaction when (T::class) {
+                String::class -> returned as T
+                LocalDateTime::class -> returned.toLongOrNull().toLocalDateTime() as T
+                SpotifyStatus::class -> enumValueOf<SpotifyStatus>(returned) as T
+                else -> null
+            }
+        }
     }
 
-    fun setValue(keyIn: GenericKeyValueKey, valueIn: Any) {
+    fun <T : Enum<T>> setValue(keyIn: GenericKeyValueKey, valueIn: Enum<T>) = setValue(keyIn, valueIn.toString())
+    fun setValue(keyIn: GenericKeyValueKey, valueIn: LocalDateTime) = setValue(keyIn, valueIn.toEpochSecond().toString())
+    fun setValue(keyIn: GenericKeyValueKey, valueIn: String) {
         val keyId = keyIn.name
         transaction {
             val query: (SqlExpressionBuilder.() -> Op<Boolean>) = { GenericKeyValueTable.key eq keyId }
             if (GenericKeyValueTable.select(query).count() == 1L) {
                 GenericKeyValueTable.update(query) { update ->
-                    update[value] = valueIn.toString()
+                    update[value] = valueIn
                 }
             } else {
                 GenericKeyValueTable.insert { insert ->
                     insert[key] = keyId
-                    insert[value] = valueIn.toString()
+                    insert[value] = valueIn
                 }
             }
         }
