@@ -17,6 +17,7 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
 import se.michaelthelin.spotify.SpotifyApi
 import se.michaelthelin.spotify.SpotifyHttpManager
+import se.michaelthelin.spotify.enums.AuthorizationScope
 import se.michaelthelin.spotify.model_objects.specification.PlaylistSimplified
 import util.Config
 import util.extensions.UrlExtensions.splitQuery
@@ -31,6 +32,7 @@ object SpotifyImpl {
 
     private val config = Config.get()
     private val redirectUrl = SpotifyHttpManager.makeUri("http://localhost:$redirectUrlPort/$redirectUrlEndpoint")
+    private val scopes = arrayOf(AuthorizationScope.PLAYLIST_READ_PRIVATE)
 
     private val spotifyApiBuilder = SpotifyApi.Builder()
         .setClientId(config.spotifyClientId)
@@ -114,7 +116,9 @@ object SpotifyImpl {
             val queries = runOAuthRequest {
                 var uri: URI
                 runBlocking {
-                    uri = spotifyApi.authorizationCodeUri().build().executeAsync().await()
+                    uri = spotifyApi.authorizationCodeUri()
+                        .scope(*scopes)
+                        .build().executeAsync().await()
                 }
                 return@runOAuthRequest uri
             }
@@ -130,6 +134,8 @@ object SpotifyImpl {
         val server = HttpServer.create(InetSocketAddress(redirectUrlPort), 0)
         server.createContext("/$redirectUrlEndpoint") { exchange ->
             responseUrl = exchange.requestURI
+
+            server.stop(0)
         }
         server.executor = null
         server.start()
