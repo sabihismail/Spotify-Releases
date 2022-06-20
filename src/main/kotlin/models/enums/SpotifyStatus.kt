@@ -1,4 +1,4 @@
-package models
+package models.enums
 
 enum class SpotifyStatus {
     NOT_STARTED,

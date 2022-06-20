@@ -11,7 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import api.SpotifyImpl
 import db.DatabaseImpl
-import models.SpotifyStatus
+import models.enums.SpotifyStatus
 import views.enums.CurrentView
 
 

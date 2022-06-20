@@ -3,13 +3,14 @@ package api
 import com.sun.net.httpserver.HttpServer
 import db.DatabaseImpl
 import db.models.GenericKeyValueKey
+import db.tables.SpotifyArtistTable
 import db.tables.SpotifyPlaylistTable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
-import models.SpotifyStatus
+import models.enums.SpotifyStatus
 import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.insertIgnore
 import org.jetbrains.exposed.sql.selectAll
@@ -40,7 +41,7 @@ object SpotifyImpl {
         .setRedirectUri(redirectUrl)
 
     fun getPlaylists(): List<ResultRow> {
-        if (DatabaseImpl.spotifyStatus <= SpotifyStatus.PLAYLIST_FETCHING) {
+        if (DatabaseImpl.spotifyStatus == SpotifyStatus.PLAYLIST_FETCHING) {
             DatabaseImpl.setValue(GenericKeyValueKey.SPOTIFY_STATUS, SpotifyStatus.NOT_STARTED)
             runBlocking {
                 launch(Dispatchers.Default) {
@@ -99,6 +100,16 @@ object SpotifyImpl {
             }
 
             DatabaseImpl.setValue(GenericKeyValueKey.SPOTIFY_STATUS, SpotifyStatus.ARTIST_FETCHING)
+        }
+    }
+
+    fun getArtists(): List<ResultRow> {
+        if (DatabaseImpl.spotifyStatus == SpotifyStatus.ARTIST_FETCHING) {
+
+        }
+
+        return transaction {
+            return@transaction SpotifyArtistTable.selectAll().toList()
         }
     }
 

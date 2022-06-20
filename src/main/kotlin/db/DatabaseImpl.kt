@@ -3,7 +3,7 @@ package db
 import db.models.GenericKeyValueKey
 import db.tables.GenericKeyValueTable
 import db.tables.SpotifyPlaylistTable
-import models.SpotifyStatus
+import models.enums.SpotifyStatus
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.TransactionManager
 import org.jetbrains.exposed.sql.transactions.transaction

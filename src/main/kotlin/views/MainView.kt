@@ -3,7 +3,7 @@ package views
 import androidx.compose.runtime.*
 import api.SpotifyImpl
 import db.DatabaseImpl
-import models.SpotifyStatus
+import models.enums.SpotifyStatus
 import views.enums.CurrentView
 
 
@@ -24,6 +24,7 @@ fun MainView() {
     val changeView = { nextScreen: CurrentView -> screenState = nextScreen }
     when (screenState) {
         CurrentView.LOGIN -> LoginView(changeView = changeView)
-        CurrentView.PLAYLIST_SELECTION -> PlaylistView(SpotifyImpl.getPlaylists(), changeView = changeView)
+        CurrentView.PLAYLIST_SELECTION -> CheckboxView(SpotifyImpl.getPlaylists(), changeView = changeView)
+        CurrentView.ARTIST_SELECTION -> null
     }
 }
