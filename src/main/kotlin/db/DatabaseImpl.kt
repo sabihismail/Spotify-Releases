@@ -2,6 +2,7 @@ package db
 
 import db.models.GenericKeyValueKey
 import db.tables.GenericKeyValueTable
+import db.tables.SpotifyArtistTable
 import db.tables.SpotifyPlaylistTable
 import models.enums.SpotifyStatus
 import org.jetbrains.exposed.sql.*
@@ -23,6 +24,7 @@ object DatabaseImpl {
             SchemaUtils.createMissingTablesAndColumns(
                 GenericKeyValueTable,
                 SpotifyPlaylistTable,
+                SpotifyArtistTable,
             )
         }
     }
@@ -36,8 +38,11 @@ object DatabaseImpl {
         if (authorizationCodeCredentials == null) return
 
         setValue(GenericKeyValueKey.SPOTIFY_ACCESS_TOKEN, authorizationCodeCredentials.accessToken)
-        setValue(GenericKeyValueKey.SPOTIFY_REFRESH_TOKEN, authorizationCodeCredentials.refreshToken)
         setValue(GenericKeyValueKey.SPOTIFY_EXPIRES_IN, LocalDateTime.now().plusSeconds(authorizationCodeCredentials.expiresIn.toLong()))
+
+        if (!authorizationCodeCredentials.refreshToken.isNullOrBlank()) {
+            setValue(GenericKeyValueKey.SPOTIFY_REFRESH_TOKEN, authorizationCodeCredentials.refreshToken)
+        }
     }
 
     inline fun <reified T> getValue(key: GenericKeyValueKey): T? {

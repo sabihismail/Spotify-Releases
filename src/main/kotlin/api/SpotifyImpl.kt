@@ -20,6 +20,8 @@ import se.michaelthelin.spotify.SpotifyApi
 import se.michaelthelin.spotify.SpotifyHttpManager
 import se.michaelthelin.spotify.enums.AuthorizationScope
 import se.michaelthelin.spotify.model_objects.specification.PlaylistSimplified
+import se.michaelthelin.spotify.model_objects.specification.PlaylistTrack
+import se.michaelthelin.spotify.model_objects.specification.Track
 import util.Config
 import util.extensions.UrlExtensions.splitQuery
 import java.awt.Desktop
@@ -72,10 +74,11 @@ object SpotifyImpl {
             }
 
             transaction {
-                allPlaylists.forEach { playlist ->
+                allPlaylists.forEachIndexed{ i, playlist ->
                     SpotifyPlaylistTable.insertIgnore {
                         it[playlistId] = playlist.id
                         it[playlistName] = playlist.name
+                        it[sortOrder] = (i + 1)
                         it[isIncluded] = false
                     }
                 }
@@ -105,7 +108,57 @@ object SpotifyImpl {
 
     fun getArtists(): List<ResultRow> {
         if (DatabaseImpl.spotifyStatus == SpotifyStatus.ARTIST_FETCHING) {
+            runBlocking {
+                launch(Dispatchers.Default) {
+                    authenticate()
+                }
+            }
 
+            val api = spotifyApiBuilder.setAccessToken(DatabaseImpl.accessToken)
+                .setRefreshToken(DatabaseImpl.refreshToken)
+                .build()
+
+            val allPlaylists = getPlaylists()
+            val artistMapping = allPlaylists.filter { it[SpotifyPlaylistTable.isIncluded] }
+                .map {
+                    var isComplete = false
+                    var offset = 0
+
+                    val allPlaylistItems = mutableListOf<PlaylistTrack>()
+                    while (!isComplete) {
+                        val playlistItems = api.getPlaylistsItems(it[SpotifyPlaylistTable.playlistId])
+                            //.fields("items(track(name,href,artists(id,name))),next")
+                            .limit(50)
+                            .offset(offset)
+                            .build()
+                            .execute()
+
+                        allPlaylistItems.addAll(playlistItems.items)
+
+                        offset += playlistItems.items.size
+                        isComplete = playlistItems.items.isEmpty()
+                    }
+
+                    it[SpotifyPlaylistTable.id] to allPlaylistItems.filter { item -> !item.isLocal }
+                        .map { item -> item.track as Track }
+                        .flatMap { item -> item.artists.toList() }
+                        .distinctBy { item -> item.id }
+                }
+
+            transaction {
+                artistMapping.forEach { (playlistIdColumn, artists) ->
+                    artists.forEach { artist ->
+                        SpotifyArtistTable.insertIgnore {
+                            it[playlistId] = playlistIdColumn
+                            it[artistId] = artist.id
+                            it[artistName] = artist.name
+                            it[isIncluded] = false
+                        }
+                    }
+                }
+            }
+
+            DatabaseImpl.setValue(GenericKeyValueKey.SPOTIFY_STATUS, SpotifyStatus.ARTIST_SELECTION)
         }
 
         return transaction {
@@ -113,7 +166,25 @@ object SpotifyImpl {
         }
     }
 
-    private suspend fun authenticate() {
+    fun setArtists(artistsToCheck: List<Int>) {
+        transaction {
+            SpotifyArtistTable.update({ SpotifyArtistTable.id inList artistsToCheck }) {
+                it[isIncluded] = true
+            }
+
+            SpotifyArtistTable.update({ SpotifyPlaylistTable.id notInList artistsToCheck }) {
+                it[isIncluded] = false
+            }
+
+            DatabaseImpl.setValue(GenericKeyValueKey.SPOTIFY_STATUS, SpotifyStatus.ALBUM_FETCHING)
+        }
+    }
+
+    fun getAlbums() {
+        TODO("Not yet implemented")
+    }
+
+    suspend fun authenticate() {
         if (LocalDateTime.now() < DatabaseImpl.expiresIn) return
 
         if (!DatabaseImpl.accessToken.isNullOrBlank()) {

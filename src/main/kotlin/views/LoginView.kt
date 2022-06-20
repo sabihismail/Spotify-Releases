@@ -11,7 +11,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import api.SpotifyImpl
 import db.DatabaseImpl
+import db.models.GenericKeyValueKey
+import db.tables.SpotifyArtistTable
+import db.tables.SpotifyPlaylistTable
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import models.enums.SpotifyStatus
+import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.transactions.transaction
 import views.enums.CurrentView
 
 
@@ -24,10 +32,29 @@ fun LoginView(changeView: (CurrentView) -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Button(onClick = {
-            SpotifyImpl.getPlaylists()
+            runBlocking {
+                withContext(Dispatchers.Default) {
+                    SpotifyImpl.authenticate()
+                }
+            }
 
-            if (DatabaseImpl.spotifyStatus == SpotifyStatus.PLAYLIST_SELECTION) {
+            if (transaction { return@transaction SpotifyPlaylistTable.selectAll().count() } == 0L) {
+                DatabaseImpl.setValue(GenericKeyValueKey.SPOTIFY_STATUS, SpotifyStatus.PLAYLIST_FETCHING)
+                SpotifyImpl.getPlaylists()
+
                 changeView(CurrentView.PLAYLIST_SELECTION)
+                return@Button
+            } else if (transaction { return@transaction SpotifyPlaylistTable.selectAll().count { it[SpotifyPlaylistTable.isIncluded] } } == 0) {
+                DatabaseImpl.setValue(GenericKeyValueKey.SPOTIFY_STATUS, SpotifyStatus.PLAYLIST_SELECTION)
+                changeView(CurrentView.PLAYLIST_SELECTION)
+            } else if (transaction { return@transaction SpotifyArtistTable.selectAll().count() } == 0L) {
+                DatabaseImpl.setValue(GenericKeyValueKey.SPOTIFY_STATUS, SpotifyStatus.ARTIST_FETCHING)
+                SpotifyImpl.getArtists()
+
+                changeView(CurrentView.ARTIST_SELECTION)
+            } else if (transaction { return@transaction SpotifyArtistTable.selectAll().count { it[SpotifyArtistTable.isIncluded] } } == 0) {
+                DatabaseImpl.setValue(GenericKeyValueKey.SPOTIFY_STATUS, SpotifyStatus.ARTIST_SELECTION)
+                changeView(CurrentView.ARTIST_SELECTION)
             }
         }) {
             Text("Login to Spotify")
