@@ -3,7 +3,9 @@ package api
 import com.sun.net.httpserver.HttpServer
 import db.DatabaseImpl
 import db.models.GenericKeyValueKey
+import db.tables.SpotifyAlbumTable
 import db.tables.SpotifyArtistTable
+import db.tables.SpotifyPlaylistArtistMappingTable
 import db.tables.SpotifyPlaylistTable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.future.await
@@ -11,14 +13,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import models.enums.SpotifyStatus
-import org.jetbrains.exposed.sql.ResultRow
-import org.jetbrains.exposed.sql.insertIgnore
-import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
-import org.jetbrains.exposed.sql.update
 import se.michaelthelin.spotify.SpotifyApi
 import se.michaelthelin.spotify.SpotifyHttpManager
 import se.michaelthelin.spotify.enums.AuthorizationScope
+import se.michaelthelin.spotify.model_objects.specification.AlbumSimplified
 import se.michaelthelin.spotify.model_objects.specification.PlaylistSimplified
 import se.michaelthelin.spotify.model_objects.specification.PlaylistTrack
 import se.michaelthelin.spotify.model_objects.specification.Track
@@ -27,6 +27,7 @@ import util.extensions.UrlExtensions.splitQuery
 import java.awt.Desktop
 import java.net.InetSocketAddress
 import java.net.URI
+import java.time.LocalDate
 import java.time.LocalDateTime
 
 object SpotifyImpl {
@@ -119,40 +120,47 @@ object SpotifyImpl {
                 .build()
 
             val allPlaylists = getPlaylists()
-            val artistMapping = allPlaylists.filter { it[SpotifyPlaylistTable.isIncluded] }
-                .map {
-                    var isComplete = false
-                    var offset = 0
+            val artistMapping = allPlaylists.map {
+                var isComplete = false
+                var offset = 0
 
-                    val allPlaylistItems = mutableListOf<PlaylistTrack>()
-                    while (!isComplete) {
-                        val playlistItems = api.getPlaylistsItems(it[SpotifyPlaylistTable.playlistId])
-                            //.fields("items(track(name,href,artists(id,name))),next")
-                            .limit(50)
-                            .offset(offset)
-                            .build()
-                            .execute()
+                val allPlaylistItems = mutableListOf<PlaylistTrack>()
+                while (!isComplete) {
+                    val playlistItems = api.getPlaylistsItems(it[SpotifyPlaylistTable.playlistId])
+                        //.fields("items(track(name,href,artists(id,name))),next")
+                        .limit(50)
+                        .offset(offset)
+                        .build()
+                        .execute()
 
-                        allPlaylistItems.addAll(playlistItems.items)
+                    allPlaylistItems.addAll(playlistItems.items)
 
-                        offset += playlistItems.items.size
-                        isComplete = playlistItems.items.isEmpty()
-                    }
-
-                    it[SpotifyPlaylistTable.id] to allPlaylistItems.filter { item -> !item.isLocal }
-                        .map { item -> item.track as Track }
-                        .flatMap { item -> item.artists.toList() }
-                        .distinctBy { item -> item.id }
+                    offset += playlistItems.items.size
+                    isComplete = playlistItems.items.isEmpty()
                 }
+
+                it[SpotifyPlaylistTable.id] to allPlaylistItems.filter { item -> !item.isLocal }
+                    .map { item -> item.track as Track }
+                    .flatMap { item -> item.artists.toList() }
+                    .distinctBy { item -> item.id }
+            }
 
             transaction {
                 artistMapping.forEach { (playlistIdColumn, artists) ->
                     artists.forEach { artist ->
                         SpotifyArtistTable.insertIgnore {
-                            it[playlistId] = playlistIdColumn
                             it[artistId] = artist.id
                             it[artistName] = artist.name
                             it[isIncluded] = false
+                        }
+
+                        val artistIdSaved = SpotifyArtistTable.slice(SpotifyArtistTable.id)
+                            .select { SpotifyArtistTable.artistId eq artist.id }
+                            .first()[SpotifyArtistTable.id]
+
+                        SpotifyPlaylistArtistMappingTable.insertIgnore {
+                            it[playlistId] = playlistIdColumn
+                            it[artistId] = artistIdSaved
                         }
                     }
                 }
@@ -162,7 +170,10 @@ object SpotifyImpl {
         }
 
         return transaction {
-            return@transaction SpotifyArtistTable.selectAll().toList()
+            return@transaction (SpotifyArtistTable innerJoin SpotifyPlaylistTable)
+                .slice(SpotifyArtistTable.columns)
+                .select { SpotifyPlaylistTable.isIncluded eq true }
+                .toList()
         }
     }
 
@@ -180,8 +191,64 @@ object SpotifyImpl {
         }
     }
 
-    fun getAlbums() {
-        TODO("Not yet implemented")
+    fun getAlbums(): List<ResultRow> {
+        if (DatabaseImpl.spotifyStatus == SpotifyStatus.ALBUM_FETCHING) {
+            runBlocking {
+                launch(Dispatchers.Default) {
+                    authenticate()
+                }
+            }
+
+            val api = spotifyApiBuilder.setAccessToken(DatabaseImpl.accessToken)
+                .setRefreshToken(DatabaseImpl.refreshToken)
+                .build()
+
+            val allArtists = getArtists()
+            val albumMapping = allArtists
+                .map {
+                    var isComplete = false
+                    var offset = 0
+
+                    val allAlbums = mutableListOf<AlbumSimplified>()
+                    while (!isComplete) {
+                        val albums = api.getArtistsAlbums(it[SpotifyArtistTable.artistId])
+                            .limit(50)
+                            .offset(offset)
+                            .build()
+                            .execute()
+
+                        allAlbums.addAll(albums.items)
+
+                        offset += albums.items.size
+                        isComplete = albums.items.isEmpty()
+                    }
+
+                    it[SpotifyArtistTable.id] to allAlbums
+                }
+
+            transaction {
+                albumMapping.forEach { (artistIdColumn, albums) ->
+                    albums.forEach { album ->
+                        SpotifyAlbumTable.insertIgnore {
+                            it[artistId] = artistIdColumn
+                            it[albumId] = album.id
+                            it[albumName] = album.name
+                            it[albumDate] = LocalDate.parse(album.releaseDate)
+                            it[albumImageUrl] = album.images.sortedByDescending { image -> image.height }.first().url
+                        }
+                    }
+                }
+            }
+
+            DatabaseImpl.setValue(GenericKeyValueKey.SPOTIFY_STATUS, SpotifyStatus.COMPLETED)
+        }
+
+        return transaction {
+            return@transaction (SpotifyAlbumTable innerJoin SpotifyArtistTable innerJoin SpotifyPlaylistTable)
+                .slice(listOf(SpotifyAlbumTable.columns, SpotifyArtistTable.columns).flatten())
+                .select { SpotifyPlaylistTable.isIncluded and SpotifyArtistTable.isIncluded }
+                .toList()
+        }
     }
 
     suspend fun authenticate() {

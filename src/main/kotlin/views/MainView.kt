@@ -55,6 +55,6 @@ fun MainView() {
             },
             changeView = changeView
         )
-        CurrentView.ALBUM_VIEW -> LoginView(changeView)
+        CurrentView.ALBUM_VIEW -> AlbumView(SpotifyImpl.getAlbums())
     }
 }
