@@ -36,7 +36,7 @@ object SpotifyImpl {
 
     private val config = Config.get()
     private val redirectUrl = SpotifyHttpManager.makeUri("http://localhost:$redirectUrlPort/$redirectUrlEndpoint")
-    private val scopes = arrayOf(AuthorizationScope.PLAYLIST_READ_PRIVATE)
+    private val scopes = arrayOf(AuthorizationScope.PLAYLIST_READ_PRIVATE, AuthorizationScope.USER_TOP_READ)
 
     private val spotifyApiBuilder = SpotifyApi.Builder()
         .setClientId(config.spotifyClientId)
@@ -108,17 +108,17 @@ object SpotifyImpl {
     }
 
     fun getArtists(): List<ResultRow> {
-        if (DatabaseImpl.spotifyStatus == SpotifyStatus.ARTIST_FETCHING) {
-            runBlocking {
-                launch(Dispatchers.Default) {
-                    authenticate()
-                }
+        runBlocking {
+            launch(Dispatchers.Default) {
+                authenticate()
             }
+        }
 
-            val api = spotifyApiBuilder.setAccessToken(DatabaseImpl.accessToken)
-                .setRefreshToken(DatabaseImpl.refreshToken)
-                .build()
+        val api = spotifyApiBuilder.setAccessToken(DatabaseImpl.accessToken)
+            .setRefreshToken(DatabaseImpl.refreshToken)
+            .build()
 
+        if (DatabaseImpl.spotifyStatus == SpotifyStatus.ARTIST_FETCHING) {
             val allPlaylists = getPlaylists()
             val artistMapping = allPlaylists.map {
                 var isComplete = false
@@ -169,10 +169,23 @@ object SpotifyImpl {
             DatabaseImpl.setValue(GenericKeyValueKey.SPOTIFY_STATUS, SpotifyStatus.ARTIST_SELECTION)
         }
 
+        val topArtists = api.usersTopArtists.time_range("long_term")
+            .limit(50)
+            .build()
+            .execute()
+            .items
+            .mapIndexed { i, artist -> artist.id to i }
+            .toMap()
+
         return transaction {
-            return@transaction (SpotifyArtistTable innerJoin SpotifyPlaylistTable)
+            return@transaction (SpotifyArtistTable innerJoin SpotifyPlaylistArtistMappingTable innerJoin SpotifyPlaylistTable)
                 .slice(SpotifyArtistTable.columns)
                 .select { SpotifyPlaylistTable.isIncluded eq true }
+                .distinctBy { it[SpotifyArtistTable.id] }
+                .sortedWith(
+                    compareBy<ResultRow> { artist ->  topArtists.getOrDefault(artist[SpotifyArtistTable.artistId], Int.MAX_VALUE) }
+                        .thenBy { artist -> artist[SpotifyArtistTable.artistName] }
+                )
                 .toList()
         }
     }
@@ -254,11 +267,12 @@ object SpotifyImpl {
     suspend fun authenticate() {
         if (LocalDateTime.now() < DatabaseImpl.expiresIn) return
 
-        if (!DatabaseImpl.accessToken.isNullOrBlank()) {
+        val scopesStr = scopes.joinToString(", ")
+        if (DatabaseImpl.scopes == scopesStr && !DatabaseImpl.accessToken.isNullOrBlank()) {
             val spotifyApi = spotifyApiBuilder.setRefreshToken(DatabaseImpl.refreshToken).build()
 
             val authorizationCodeRefresh = spotifyApi.authorizationCodeRefresh().build().executeAsync().await()
-            DatabaseImpl.saveSpotifyCredentials(authorizationCodeRefresh)
+            DatabaseImpl.saveSpotifyCredentials(authorizationCodeRefresh, scopesStr)
         } else {
             val spotifyApi = spotifyApiBuilder.build()
 
@@ -274,7 +288,7 @@ object SpotifyImpl {
 
             val code = queries["code"]?.first()
             val authorizationWithCode = spotifyApi.authorizationCode(code).build().executeAsync().await()
-            DatabaseImpl.saveSpotifyCredentials(authorizationWithCode)
+            DatabaseImpl.saveSpotifyCredentials(authorizationWithCode, scopesStr)
         }
     }
 

@@ -41,7 +41,7 @@ fun MainView() {
             changeView = changeView
         )
         CurrentView.ARTIST_SELECTION -> CheckboxView(
-            SpotifyImpl.getArtists().sortedBy { it[SpotifyArtistTable.artistName] },
+            SpotifyImpl.getArtists(),
             idColumn = SpotifyArtistTable.id,
             checkedColumn = SpotifyArtistTable.isIncluded,
             labelColumn = SpotifyArtistTable.artistName,

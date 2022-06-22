@@ -3,6 +3,7 @@ package db
 import db.models.GenericKeyValueKey
 import db.tables.GenericKeyValueTable
 import db.tables.SpotifyArtistTable
+import db.tables.SpotifyPlaylistArtistMappingTable
 import db.tables.SpotifyPlaylistTable
 import models.enums.SpotifyStatus
 import org.jetbrains.exposed.sql.*
@@ -25,23 +26,26 @@ object DatabaseImpl {
                 GenericKeyValueTable,
                 SpotifyPlaylistTable,
                 SpotifyArtistTable,
+                SpotifyPlaylistArtistMappingTable,
             )
         }
     }
 
-    val accessToken get() = getValue<String>(GenericKeyValueKey.SPOTIFY_ACCESS_TOKEN)
-    val refreshToken get() = getValue<String>(GenericKeyValueKey.SPOTIFY_REFRESH_TOKEN)
-    val expiresIn: LocalDateTime get() = getValue<LocalDateTime>(GenericKeyValueKey.SPOTIFY_EXPIRES_IN) ?: LocalDateTime.MIN
+    val accessToken get() = getValue<String>(GenericKeyValueKey.SPOTIFY_API_ACCESS_TOKEN)
+    val refreshToken get() = getValue<String>(GenericKeyValueKey.SPOTIFY_API_REFRESH_TOKEN)
+    val expiresIn: LocalDateTime get() = getValue<LocalDateTime>(GenericKeyValueKey.SPOTIFY_API_EXPIRES_IN) ?: LocalDateTime.MIN
+    val scopes get() = getValue<String>(GenericKeyValueKey.SPOTIFY_API_SCOPES)
     val spotifyStatus get() = getValue<SpotifyStatus>(GenericKeyValueKey.SPOTIFY_STATUS) ?: SpotifyStatus.NOT_STARTED
 
-    fun saveSpotifyCredentials(authorizationCodeCredentials: AuthorizationCodeCredentials?) {
+    fun saveSpotifyCredentials(authorizationCodeCredentials: AuthorizationCodeCredentials?, scopesStr: String) {
         if (authorizationCodeCredentials == null) return
 
-        setValue(GenericKeyValueKey.SPOTIFY_ACCESS_TOKEN, authorizationCodeCredentials.accessToken)
-        setValue(GenericKeyValueKey.SPOTIFY_EXPIRES_IN, LocalDateTime.now().plusSeconds(authorizationCodeCredentials.expiresIn.toLong()))
+        setValue(GenericKeyValueKey.SPOTIFY_API_ACCESS_TOKEN, authorizationCodeCredentials.accessToken)
+        setValue(GenericKeyValueKey.SPOTIFY_API_EXPIRES_IN, LocalDateTime.now().plusSeconds(authorizationCodeCredentials.expiresIn.toLong()))
+        setValue(GenericKeyValueKey.SPOTIFY_API_SCOPES, scopesStr)
 
         if (!authorizationCodeCredentials.refreshToken.isNullOrBlank()) {
-            setValue(GenericKeyValueKey.SPOTIFY_REFRESH_TOKEN, authorizationCodeCredentials.refreshToken)
+            setValue(GenericKeyValueKey.SPOTIFY_API_REFRESH_TOKEN, authorizationCodeCredentials.refreshToken)
         }
     }
 
