@@ -183,7 +183,7 @@ object SpotifyImpl {
                 .select { SpotifyPlaylistTable.isIncluded eq true }
                 .distinctBy { it[SpotifyArtistTable.id] }
                 .sortedWith(
-                    compareBy<ResultRow> { artist ->  topArtists.getOrDefault(artist[SpotifyArtistTable.artistId], Int.MAX_VALUE) }
+                    compareBy<ResultRow> { artist -> topArtists.getOrDefault(artist[SpotifyArtistTable.artistId], Int.MAX_VALUE) }
                         .thenBy { artist -> artist[SpotifyArtistTable.artistName] }
                 )
                 .toList()
