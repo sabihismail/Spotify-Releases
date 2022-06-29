@@ -7,18 +7,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.Button
-import androidx.compose.material.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.sql.Column
 import org.jetbrains.exposed.sql.ResultRow
-import views.enums.CurrentView
 import views.util.LabelledCheckBox
 
 @Composable
@@ -45,14 +39,14 @@ fun CheckboxEntry(entry: ResultRow, idColumn: Column<EntityID<Int>>, checkedColu
 
 @Composable
 @Preview
-fun CheckboxView(entries: List<ResultRow>, idColumn: Column<EntityID<Int>>, checkedColumn: Column<Boolean>, labelColumn: Column<String>,
-                 complete: (List<Int>) -> Unit, changeView: (CurrentView) -> Unit) {
+fun CheckboxView(ButtonRow: @Composable (checkedEntries: MutableList<Int>) -> Unit, entries: List<ResultRow>, idColumn: Column<EntityID<Int>>,
+                 checkedColumn: Column<Boolean>, labelColumn: Column<String>) {
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        val checkedCheckboxIds by remember {
+        val checkedEntries by remember {
             mutableStateOf(entries.filter { it[checkedColumn] }.map { it[idColumn].value }.toMutableList())
         }
 
@@ -61,18 +55,12 @@ fun CheckboxView(entries: List<ResultRow>, idColumn: Column<EntityID<Int>>, chec
             modifier = Modifier.weight(1f),
         ) {
             items(entries) { playlist ->
-                CheckboxEntry(playlist, idColumn, checkedColumn, labelColumn, checkedCheckboxIds)
+                CheckboxEntry(playlist, idColumn, checkedColumn, labelColumn, checkedEntries)
             }
         }
 
-        Button(onClick = {
-            runBlocking {
-                launch(Dispatchers.Default) {
-                    complete(checkedCheckboxIds.toList())
-                }
-            }
-        }) {
-            Text("Save")
+        Row {
+            ButtonRow(checkedEntries)
         }
     }
 }
