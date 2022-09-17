@@ -146,14 +146,19 @@ object SpotifyImpl {
             }
 
             transaction {
+                artistMapping.flatMap { it.second }
+                    .groupBy { it.id }
+                    .forEach { (id, artist) ->
+                        SpotifyArtistTable.insert {
+                            it[artistId] = id
+                            it[artistName] = artist.first().name
+                            it[isIncluded] = false
+                            it[trackCount] = artist.size
+                        }
+                    }
+
                 artistMapping.forEach { (playlistIdColumn, artists) ->
                     artists.forEach { artist ->
-                        SpotifyArtistTable.insertIgnore {
-                            it[artistId] = artist.id
-                            it[artistName] = artist.name
-                            it[isIncluded] = false
-                        }
-
                         val artistIdSaved = SpotifyArtistTable.slice(SpotifyArtistTable.id)
                             .select { SpotifyArtistTable.artistId eq artist.id }
                             .first()[SpotifyArtistTable.id]

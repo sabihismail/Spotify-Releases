@@ -19,16 +19,16 @@ repositories {
 
 dependencies {
     implementation(compose.desktop.currentOs)
-    implementation("com.google.code.gson", "gson", "2.9.0")
-    implementation("se.michaelthelin.spotify", "spotify-web-api-java", "7.1.0")
+    implementation("com.google.code.gson", "gson", "2.9.1")
+    implementation("se.michaelthelin.spotify", "spotify-web-api-java", "7.2.0")
 
-    val exposedVersion = "0.38.2"
+    val exposedVersion = "0.39.2"
     implementation("org.jetbrains.exposed", "exposed-core", exposedVersion)
     implementation("org.jetbrains.exposed", "exposed-dao", exposedVersion)
     implementation("org.jetbrains.exposed", "exposed-jdbc", exposedVersion)
     implementation("org.jetbrains.exposed", "exposed-java-time", exposedVersion)
 
-    implementation("org.xerial", "sqlite-jdbc", "3.36.0.3")
+    implementation("org.xerial", "sqlite-jdbc", "3.39.3.0")
 
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core")
