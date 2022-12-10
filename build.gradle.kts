@@ -1,10 +1,9 @@
-import org.jetbrains.compose.compose
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    kotlin("jvm") version "1.6.10"
-    id("org.jetbrains.compose") version "1.1.1"
+    kotlin("jvm") version "1.7.10"
+    id("org.jetbrains.compose") version "1.2.1"
 }
 
 group = "me.sabihismail"
@@ -19,10 +18,10 @@ repositories {
 
 dependencies {
     implementation(compose.desktop.currentOs)
-    implementation("com.google.code.gson", "gson", "2.9.1")
-    implementation("se.michaelthelin.spotify", "spotify-web-api-java", "7.2.0")
+    implementation("com.google.code.gson", "gson", "2.10")
+    implementation("se.michaelthelin.spotify", "spotify-web-api-java", "7.2.2")
 
-    val exposedVersion = "0.39.2"
+    val exposedVersion = "0.41.1"
     implementation("org.jetbrains.exposed", "exposed-core", exposedVersion)
     implementation("org.jetbrains.exposed", "exposed-dao", exposedVersion)
     implementation("org.jetbrains.exposed", "exposed-jdbc", exposedVersion)

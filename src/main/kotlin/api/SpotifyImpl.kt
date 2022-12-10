@@ -120,47 +120,56 @@ object SpotifyImpl {
 
         if (DatabaseImpl.spotifyStatus == SpotifyStatus.ARTIST_FETCHING) {
             val allPlaylists = getPlaylists()
-            val artistMapping = allPlaylists.map {
-                var isComplete = false
-                var offset = 0
+            val artistMapping = allPlaylists.filter { it[SpotifyPlaylistTable.isIncluded] }
+                .map {
+                    var isComplete = false
+                    var offset = 0
 
-                val allPlaylistItems = mutableListOf<PlaylistTrack>()
-                while (!isComplete) {
-                    val playlistItems = api.getPlaylistsItems(it[SpotifyPlaylistTable.playlistId])
-                        //.fields("items(track(name,href,artists(id,name))),next")
-                        .limit(50)
-                        .offset(offset)
-                        .build()
-                        .execute()
+                    val allPlaylistItems = mutableListOf<PlaylistTrack>()
+                    while (!isComplete) {
+                        val playlistItems = api.getPlaylistsItems(it[SpotifyPlaylistTable.playlistId])
+                            //.fields("items(track(name,href,artists(id,name))),next")
+                            .limit(50)
+                            .offset(offset)
+                            .build()
+                            .execute()
 
-                    allPlaylistItems.addAll(playlistItems.items)
+                        allPlaylistItems.addAll(playlistItems.items)
 
-                    offset += playlistItems.items.size
-                    isComplete = playlistItems.items.isEmpty()
+                        offset += playlistItems.items.size
+                        isComplete = playlistItems.items.isEmpty()
+                    }
+
+                    it[SpotifyPlaylistTable.id] to allPlaylistItems.filter { item -> !item.isLocal }
+                        .map { item -> item.track as Track }
+                        .flatMap { item -> item.artists.toList() }
+                        .groupBy { artist -> artist.id }
                 }
 
-                it[SpotifyPlaylistTable.id] to allPlaylistItems.filter { item -> !item.isLocal }
-                    .map { item -> item.track as Track }
-                    .flatMap { item -> item.artists.toList() }
-                    .distinctBy { item -> item.id }
-            }
+            val topArtists = api.usersTopArtists.time_range("long_term")
+                .limit(50)
+                .build()
+                .execute()
+                .items
 
             transaction {
-                artistMapping.flatMap { it.second }
-                    .groupBy { it.id }
-                    .forEach { (id, artist) ->
-                        SpotifyArtistTable.insert {
-                            it[artistId] = id
-                            it[artistName] = artist.first().name
-                            it[isIncluded] = false
-                            it[trackCount] = artist.size
+                artistMapping.map { it.second }
+                    .forEach { currentMapping ->
+                        currentMapping.forEach { (id, lst) ->
+                            SpotifyArtistTable.insert {
+                                it[artistId] = id
+                                it[artistName] = lst.first().name
+                                it[isIncluded] = false
+                                it[trackCount] = lst.size
+                                it[playCount] = 0
+                            }
                         }
                     }
 
                 artistMapping.forEach { (playlistIdColumn, artists) ->
                     artists.forEach { artist ->
                         val artistIdSaved = SpotifyArtistTable.slice(SpotifyArtistTable.id)
-                            .select { SpotifyArtistTable.artistId eq artist.id }
+                            .select { SpotifyArtistTable.artistId eq artist.key }
                             .first()[SpotifyArtistTable.id]
 
                         SpotifyPlaylistArtistMappingTable.insertIgnore {
@@ -174,23 +183,12 @@ object SpotifyImpl {
             DatabaseImpl.setValue(GenericKeyValueKey.SPOTIFY_STATUS, SpotifyStatus.ARTIST_SELECTION)
         }
 
-        val topArtists = api.usersTopArtists.time_range("long_term")
-            .limit(50)
-            .build()
-            .execute()
-            .items
-            .mapIndexed { i, artist -> artist.id to i }
-            .toMap()
-
         return transaction {
             return@transaction (SpotifyArtistTable innerJoin SpotifyPlaylistArtistMappingTable innerJoin SpotifyPlaylistTable)
                 .slice(SpotifyArtistTable.columns)
                 .select { SpotifyPlaylistTable.isIncluded eq true }
                 .distinctBy { it[SpotifyArtistTable.id] }
-                .sortedWith(
-                    compareBy<ResultRow> { artist -> topArtists.getOrDefault(artist[SpotifyArtistTable.artistId], Int.MAX_VALUE) }
-                        .thenBy { artist -> artist[SpotifyArtistTable.artistName] }
-                )
+                .sortedByDescending { it[SpotifyArtistTable.trackCount] }
                 .toList()
         }
     }
