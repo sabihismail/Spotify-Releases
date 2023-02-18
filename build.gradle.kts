@@ -3,7 +3,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     kotlin("jvm") version "1.7.10"
-    id("org.jetbrains.compose") version "1.2.1"
+    id("org.jetbrains.compose") version "1.3.0"
 }
 
 group = "me.sabihismail"
@@ -18,8 +18,8 @@ repositories {
 
 dependencies {
     implementation(compose.desktop.currentOs)
-    implementation("com.google.code.gson", "gson", "2.10")
-    implementation("se.michaelthelin.spotify", "spotify-web-api-java", "7.2.2")
+    implementation("com.google.code.gson", "gson", "2.10.1")
+    implementation("se.michaelthelin.spotify", "spotify-web-api-java", "8.0.0")
 
     val exposedVersion = "0.41.1"
     implementation("org.jetbrains.exposed", "exposed-core", exposedVersion)
@@ -27,7 +27,7 @@ dependencies {
     implementation("org.jetbrains.exposed", "exposed-jdbc", exposedVersion)
     implementation("org.jetbrains.exposed", "exposed-java-time", exposedVersion)
 
-    implementation("org.xerial", "sqlite-jdbc", "3.39.3.0")
+    implementation("org.xerial", "sqlite-jdbc", "3.40.1.0")
 
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core")
